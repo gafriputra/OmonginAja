@@ -1,0 +1,16 @@
+{
+  "name": "omonginaja",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "build": "npm run build -w @omonginaja/shared && npm run build -w @omonginaja/server && npm run build -w @omonginaja/desktop",
+    "dev:server": "npm run dev -w @omonginaja/server",
+    "dev:desktop": "npm run dev -w @omonginaja/desktop",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
