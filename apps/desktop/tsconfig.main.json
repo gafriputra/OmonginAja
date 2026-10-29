@@ -5,7 +5,8 @@
     "moduleResolution": "Node",
     "rootDir": "src/main",
     "outDir": "dist/main",
-    "declaration": false
+    "declaration": false,
+    "noEmit": true
   },
   "include": ["src/main"]
 }

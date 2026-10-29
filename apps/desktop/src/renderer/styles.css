@@ -32,3 +32,4 @@ body.overlay { background: transparent; }
 .subtitle { margin: 0 auto; width: fit-content; max-width: 100%; padding: 12px 18px; border-radius: 12px; background: rgba(0, 0, 0, 0.75); color: white; text-align: center; }
 .subtitle .translated { font-size: 22px; font-weight: 600; }
 .subtitle .original { font-size: 13px; color: #ccc; }
+.latency { margin: 0; font-size: 13px; color: var(--muted); }

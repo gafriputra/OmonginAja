@@ -6,6 +6,11 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p .",
-    "typecheck": "tsc -p . --noEmit"
+    "typecheck": "tsc -p . --noEmit",
+    "test": "tsx --test src/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "@types/node": "^22.9.0"
   }
 }

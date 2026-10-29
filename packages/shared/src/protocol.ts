@@ -1,31 +1,34 @@
 import type { LanguageCode } from "./languages.js";
 
+/** Simultaneous speech-to-speech translation models OmonginAja can use. */
+export const S2S_PROVIDERS = {
+  gemini: "Gemini 3.5 Live Translate",
+  openai: "OpenAI gpt-realtime-translate",
+} as const;
+
+export type S2SProvider = keyof typeof S2S_PROVIDERS;
+
+export function isS2SProvider(value: unknown): value is S2SProvider {
+  return typeof value === "string" && value in S2S_PROVIDERS;
+}
+
 /**
- * A session has two independent audio directions:
+ * Each direction is its own provider session:
  * - "outgoing": the user's mic -> translated speech played into the virtual mic
- * - "incoming": meeting audio from the virtual speaker -> translated subtitles
+ * - "incoming": meeting audio -> translated subtitles for the user
  */
 export type Direction = "outgoing" | "incoming";
 
-/** Audio frames are sent as binary WebSocket messages: 16-bit PCM, mono, 16 kHz. */
-export const AUDIO_SAMPLE_RATE = 16000;
+/** POST /session body. The server mints a short-lived provider token so API keys never ship in the app. */
+export interface SessionRequest {
+  provider: S2SProvider;
+  targetLang: LanguageCode;
+}
 
-export type ClientMessage =
-  | {
-      type: "start";
-      direction: Direction;
-      sourceLang: LanguageCode | "auto";
-      targetLang: LanguageCode;
-      /** Synthesize translated speech (always true for outgoing). */
-      speak: boolean;
-    }
-  | { type: "stop" };
-
-export type ServerMessage =
-  | { type: "ready"; sessionId: string }
-  | { type: "transcript"; text: string; lang: string; final: boolean }
-  | { type: "translation"; text: string; lang: LanguageCode; latencyMs: number }
-  /** Followed by binary frames of PCM audio for this utterance, then "speech_end". */
-  | { type: "speech_start"; utteranceId: string; sampleRate: number }
-  | { type: "speech_end"; utteranceId: string }
-  | { type: "error"; message: string };
+export interface SessionGrant {
+  provider: S2SProvider;
+  targetLang: LanguageCode;
+  token: string;
+  /** ISO timestamp; the token must be used to connect before then. */
+  expiresAt: string;
+}

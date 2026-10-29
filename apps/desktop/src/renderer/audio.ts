@@ -1,9 +1,7 @@
-import { AUDIO_SAMPLE_RATE } from "@omonginaja/shared";
-
-/** Converts the context's float samples to 16-bit PCM in ~100 ms chunks. */
+/** Converts the context's float samples to 16-bit PCM in 40 ms chunks (small chunks keep latency low). */
 const PCM_WORKLET = `
 class PcmCapture extends AudioWorkletProcessor {
-  constructor() { super(); this.buf = new Int16Array(${AUDIO_SAMPLE_RATE / 10}); this.len = 0; }
+  constructor() { super(); this.buf = new Int16Array(Math.round(sampleRate * 0.04)); this.len = 0; }
   process(inputs) {
     const ch = inputs[0][0];
     if (!ch) return true;
@@ -31,17 +29,17 @@ export async function listDevices() {
   };
 }
 
-/** Captures an input device as 16 kHz mono PCM. Returns a stop function. */
-export async function captureDevice(deviceId: string, onChunk: (pcm: ArrayBuffer) => void) {
+/** Captures an input device as mono 16-bit PCM at `sampleRate`. Returns a stop function. */
+export async function captureDevice(deviceId: string, sampleRate: number, onChunk: (pcm: Int16Array) => void) {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { deviceId: { exact: deviceId }, channelCount: 1, echoCancellation: true, noiseSuppression: true },
   });
-  const ctx = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
+  const ctx = new AudioContext({ sampleRate });
   const url = URL.createObjectURL(new Blob([PCM_WORKLET], { type: "text/javascript" }));
   await ctx.audioWorklet.addModule(url);
   URL.revokeObjectURL(url);
   const node = new AudioWorkletNode(ctx, "pcm-capture");
-  node.port.onmessage = (e) => onChunk(e.data as ArrayBuffer);
+  node.port.onmessage = (e) => onChunk(new Int16Array(e.data as ArrayBuffer));
   ctx.createMediaStreamSource(stream).connect(node);
 
   return () => {
@@ -67,9 +65,9 @@ export class PcmPlayer {
     await this.ctx.setSinkId(sinkId);
   }
 
-  play(pcm: ArrayBuffer) {
+  play(pcm: Uint8Array) {
     if (!this.ctx) return;
-    const ints = new Int16Array(pcm);
+    const ints = new Int16Array(pcm.buffer, pcm.byteOffset, Math.floor(pcm.byteLength / 2));
     const buffer = this.ctx.createBuffer(1, ints.length, this.ctx.sampleRate);
     const floats = buffer.getChannelData(0);
     for (let i = 0; i < ints.length; i++) floats[i] = ints[i] / 0x8000;
