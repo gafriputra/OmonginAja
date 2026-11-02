@@ -68,6 +68,9 @@ export function App() {
     };
 
     handlers.current.set(id, (event) => {
+      if (event.type === "reconnecting") return setStatus("Menyambung ulang ke mesin penerjemah…");
+      if (event.type === "closed") return stop();
+      if (event.type !== "error") setStatus((s) => (s.startsWith("Menyambung ulang") ? "" : s));
       if (event.type === "audio") {
         if (direction !== "outgoing") return;
         player.play(event.pcm);
@@ -80,14 +83,16 @@ export function App() {
         line.translated += event.text;
         flush();
       } else if (event.type === "error") setStatus(event.message);
-      else if (event.type === "closed") setRunning(false);
     });
 
-    const rates = await window.omongin.s2s.start(id, serverUrl, { provider, targetLang });
+    const rates = await window.omongin.s2s.start(id, serverUrl, { provider, targetLang }).catch((e) => {
+      handlers.current.delete(id);
+      throw e;
+    });
     if (direction === "outgoing") await player.open(virtualMicId, rates.output);
 
     let silentSince = performance.now();
-    const stopCapture = await captureDevice(deviceId, rates.input, (pcm) => {
+    const stopCapture = await captureDevice(deviceId, rates.input, direction === "outgoing", (pcm) => {
       const now = performance.now();
       meter.onInput(pcm, now);
       window.omongin.s2s.audio(id, new Uint8Array(pcm.buffer));

@@ -21,6 +21,10 @@ test("gemini: audio is sent as base64 16 kHz PCM and server content becomes even
   ]);
 });
 
+test("gemini: goAway asks for a fresh session", () => {
+  assert.deepEqual(geminiAdapter.parse({ goAway: { timeLeft: "10s" } }), [{ type: "go_away" }]);
+});
+
 test("gemini: setup locks the target language", () => {
   const [setup] = geminiAdapter.setup("ja") as { setup: { generationConfig: { translationConfig: { targetLanguageCode: string } } } }[];
   assert.equal(setup.setup.generationConfig.translationConfig.targetLanguageCode, "ja");

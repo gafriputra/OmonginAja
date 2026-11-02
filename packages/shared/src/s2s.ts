@@ -6,7 +6,9 @@ export type S2SEvent =
   | { type: "audio"; pcm: Uint8Array }
   | { type: "source_text"; text: string }
   | { type: "translated_text"; text: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /** The provider will end this session soon (session length limits); open a fresh one. */
+  | { type: "go_away" };
 
 /** Wire format for one simultaneous translation provider. Pure functions, no I/O. */
 export interface S2SAdapter {
@@ -54,6 +56,7 @@ export const geminiAdapter: S2SAdapter = {
         modelTurn?: { parts?: { inlineData?: { data?: string } }[] };
       };
       error?: { message?: string };
+      goAway?: unknown;
     };
     const events: S2SEvent[] = [];
     const content = msg.serverContent;
@@ -63,6 +66,7 @@ export const geminiAdapter: S2SAdapter = {
       if (part.inlineData?.data) events.push({ type: "audio", pcm: fromBase64(part.inlineData.data) });
     }
     if (msg.error) events.push({ type: "error", message: msg.error.message ?? "Gemini error" });
+    if (msg.goAway) events.push({ type: "go_away" });
     return events;
   },
 };

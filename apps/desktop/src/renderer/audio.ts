@@ -29,10 +29,25 @@ export async function listDevices() {
   };
 }
 
-/** Captures an input device as mono 16-bit PCM at `sampleRate`. Returns a stop function. */
-export async function captureDevice(deviceId: string, sampleRate: number, onChunk: (pcm: Int16Array) => void) {
+/**
+ * Captures an input device as mono 16-bit PCM at `sampleRate`. Returns a stop function.
+ * `voiceProcessing` (echo cancellation, noise suppression, gain) suits a real mic; turn it off
+ * for loopback meeting audio, where it would muffle or cut the remote speaker.
+ */
+export async function captureDevice(
+  deviceId: string,
+  sampleRate: number,
+  voiceProcessing: boolean,
+  onChunk: (pcm: Int16Array) => void,
+) {
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { deviceId: { exact: deviceId }, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+    audio: {
+      deviceId: { exact: deviceId },
+      channelCount: 1,
+      echoCancellation: voiceProcessing,
+      noiseSuppression: voiceProcessing,
+      autoGainControl: voiceProcessing,
+    },
   });
   const ctx = new AudioContext({ sampleRate });
   const url = URL.createObjectURL(new Blob([PCM_WORKLET], { type: "text/javascript" }));

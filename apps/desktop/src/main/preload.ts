@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { S2SEvent, SessionRequest } from "@omonginaja/shared";
+import type { SessionRequest } from "@omonginaja/shared";
+import type { ConnectionEvent } from "./s2s";
 
 export interface SubtitleLine {
   original: string;
@@ -16,7 +17,7 @@ contextBridge.exposeInMainWorld("omongin", {
       ipcRenderer.invoke("s2s:start", id, serverUrl, req),
     audio: (id: string, pcm: Uint8Array) => ipcRenderer.send("s2s:audio", id, pcm),
     stop: (id: string) => ipcRenderer.send("s2s:stop", id),
-    onEvent: (cb: (id: string, event: S2SEvent | { type: "closed" }) => void) => {
+    onEvent: (cb: (id: string, event: ConnectionEvent) => void) => {
       ipcRenderer.on("s2s:event", (_e, id, event) => cb(id, event));
     },
   },

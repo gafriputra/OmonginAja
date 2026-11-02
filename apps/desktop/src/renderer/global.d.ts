@@ -15,7 +15,12 @@ interface Window {
       ): Promise<{ input: number; output: number }>;
       audio(id: string, pcm: Uint8Array): void;
       stop(id: string): void;
-      onEvent(cb: (id: string, event: import("@omonginaja/shared").S2SEvent | { type: "closed" }) => void): void;
+      onEvent(
+        cb: (
+          id: string,
+          event: import("@omonginaja/shared").S2SEvent | { type: "closed" } | { type: "reconnecting" },
+        ) => void,
+      ): void;
     };
   };
 }

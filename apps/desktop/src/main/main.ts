@@ -47,12 +47,17 @@ ipcMain.on("subtitle", (_e, line: unknown) => overlay?.webContents.send("subtitl
 
 ipcMain.handle("s2s:start", async (e, id: string, serverUrl: string, req: SessionRequest) => {
   connections.get(id)?.close();
-  const conn = new S2SConnection(req, (event) => {
+  const conn = new S2SConnection(serverUrl, req, (event) => {
     if (!e.sender.isDestroyed()) e.sender.send("s2s:event", id, event);
     if (event.type === "closed") connections.delete(id);
   });
   connections.set(id, conn);
-  await conn.open(serverUrl);
+  try {
+    await conn.open();
+  } catch (err) {
+    connections.delete(id);
+    throw err;
+  }
   return conn.sampleRates;
 });
 ipcMain.on("s2s:audio", (_e, id: string, pcm: Uint8Array) => connections.get(id)?.sendAudio(pcm));
