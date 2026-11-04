@@ -8,7 +8,7 @@ import {
   type S2SProvider,
   UsageTracker,
 } from "@omonginaja/shared";
-import { captureDevice, listDevices, PcmPlayer } from "./audio";
+import { captureDevice, listDevices, PcmPlayer, playThrough } from "./audio";
 import { History } from "./History";
 import { LineView } from "./LineView";
 import { loadHistory, loadUsage, saveHistory, saveUsage, type Conversation, type Line } from "./storage";
@@ -41,6 +41,10 @@ export function App() {
   const [micId, setMicId] = useState("");
   const [virtualMicId, setVirtualMicId] = useState("");
   const [meetingAudioId, setMeetingAudioId] = useState("");
+  /** Headset to speak the other side's translation into; empty = subtitles only. */
+  const [listenId, setListenId] = useState("");
+  const [originalVolume, setOriginalVolume] = useState(0.3);
+  const passthrough = useRef<{ setVolume(v: number): void }>();
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState("");
   const [tab, setTab] = useState<"translate" | "history">("translate");
@@ -97,7 +101,10 @@ export function App() {
       if (event.type === "closed") return stop();
       if (event.type !== "error") setStatus((s) => (s.startsWith("Menyambung ulang") ? "" : s));
       if (event.type === "audio") {
-        if (direction !== "outgoing") return;
+        if (direction === "incoming") {
+          if (listenId) player.play(event.pcm);
+          return;
+        }
         player.play(event.pcm);
         const measured = meter.onOutput(performance.now());
         if (measured !== undefined) setLatency({ last: measured, average: meter.average! });
@@ -110,11 +117,24 @@ export function App() {
       } else if (event.type === "error") setStatus(event.message);
     });
 
-    const rates = await window.omongin.s2s.start(id, serverUrl, { provider, targetLang }).catch((e) => {
-      handlers.current.delete(id);
-      throw e;
-    });
+    const rates = await window.omongin.s2s
+      .start(id, serverUrl, { provider, targetLang, echoTargetLanguage: direction === "incoming" && !!listenId })
+      .catch((e) => {
+        handlers.current.delete(id);
+        throw e;
+      });
     if (direction === "outgoing") await player.open(virtualMicId, rates.output);
+    if (direction === "incoming" && listenId) {
+      await player.open(listenId, rates.output);
+      // The meeting app now plays only into the virtual cable, so its voices reach the headset
+      // through us, turned down under the translation.
+      const through = await playThrough(deviceId, listenId, originalVolume);
+      passthrough.current = through;
+      cleanup.current.push(() => {
+        through.stop();
+        passthrough.current = undefined;
+      });
+    }
 
     let silentSince = performance.now();
     const stopCapture = await captureDevice(deviceId, rates.input, direction === "outgoing", (pcm) => {
@@ -157,6 +177,9 @@ export function App() {
         throw new Error(
           'Audio meeting tidak boleh sama dengan mic virtual, nanti terjemahanmu ikut diterjemahkan ulang. Pilih "Tidak dipakai" atau kabel virtual kedua.',
         );
+      }
+      if (listenId && listenId === virtualMicId) {
+        throw new Error("Terjemahan mereka harus dibacakan ke headset, bukan ke mic virtual.");
       }
       await startDirection("outgoing", micId, theirLang);
       if (meetingAudioId) await startDirection("incoming", meetingAudioId, myLang);
@@ -264,6 +287,29 @@ export function App() {
             <label>Mikrofon asli{deviceSelect(inputs, micId, setMicId)}</label>
             <label>Kirim terjemahan ke (mic virtual){deviceSelect(outputs, virtualMicId, setVirtualMicId)}</label>
             <label>Audio meeting (untuk subtitle){deviceSelect(inputs, meetingAudioId, setMeetingAudioId, true)}</label>
+            {meetingAudioId && (
+              <label>
+                Bacakan terjemahan mereka ke (headset)
+                {deviceSelect(outputs, listenId, setListenId, true)}
+              </label>
+            )}
+            {meetingAudioId && listenId && (
+              <label>
+                Volume suara asli mereka: {Math.round(originalVolume * 100)}%
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={originalVolume}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setOriginalVolume(v);
+                    passthrough.current?.setVolume(v);
+                  }}
+                />
+              </label>
+            )}
             <label>
               Server
               <input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} disabled={running} />

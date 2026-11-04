@@ -45,3 +45,4 @@ body.overlay { background: transparent; }
 .conversation .log { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .conversation .line { background: var(--bg); }
 button.delete { background: transparent; color: var(--accent); padding: 4px 0; text-align: left; font-weight: 500; }
+input[type="range"] { padding: 0; accent-color: var(--accent); }

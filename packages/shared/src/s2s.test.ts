@@ -26,7 +26,7 @@ test("gemini: goAway asks for a fresh session", () => {
 });
 
 test("gemini: setup locks the target language", () => {
-  const [setup] = geminiAdapter.setup("ja") as { setup: { generationConfig: { translationConfig: { targetLanguageCode: string } } } }[];
+  const [setup] = geminiAdapter.setup({ provider: "gemini", targetLang: "ja" }) as { setup: { generationConfig: { translationConfig: { targetLanguageCode: string } } } }[];
   assert.equal(setup.setup.generationConfig.translationConfig.targetLanguageCode, "ja");
 });
 

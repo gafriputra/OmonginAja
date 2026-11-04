@@ -64,6 +64,31 @@ export async function captureDevice(
 }
 
 /**
+ * Plays an input device straight to an output device at an adjustable volume. Used to keep the
+ * meeting's original voices audible, but quieter, underneath their spoken translation.
+ */
+export async function playThrough(deviceId: string, sinkId: string, volume: number) {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { deviceId: { exact: deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+  });
+  const ctx = new AudioContext({ latencyHint: "interactive" });
+  await ctx.setSinkId(sinkId);
+  const gain = ctx.createGain();
+  gain.gain.value = volume;
+  ctx.createMediaStreamSource(stream).connect(gain).connect(ctx.destination);
+
+  return {
+    setVolume(next: number) {
+      gain.gain.setTargetAtTime(next, ctx.currentTime, 0.05);
+    },
+    stop() {
+      stream.getTracks().forEach((t) => t.stop());
+      void ctx.close();
+    },
+  };
+}
+
+/**
  * Plays PCM chunks gaplessly on a chosen output device.
  * For outgoing speech this is the virtual cable (e.g. "BlackHole 2ch" / "CABLE Input"),
  * which the meeting app then hears as the "OmonginAja" microphone.

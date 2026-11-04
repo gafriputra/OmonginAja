@@ -43,7 +43,7 @@ export class S2SConnection {
     this.ws = ws;
 
     ws.on("open", () => {
-      for (const msg of this.adapter.setup(this.req.targetLang)) ws.send(JSON.stringify(msg));
+      for (const msg of this.adapter.setup(this.req)) ws.send(JSON.stringify(msg));
       for (const msg of this.pendingAudio.splice(0)) ws.send(msg);
       this.reconnects = 0;
     });

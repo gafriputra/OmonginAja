@@ -25,7 +25,18 @@ export function createApp(env = process.env, fetchFn: Fetch = fetch): Server {
     }
 
     try {
-      json(200, await mintToken({ provider: body.provider, targetLang: body.targetLang }, env, fetchFn));
+      json(
+        200,
+        await mintToken(
+          {
+            provider: body.provider,
+            targetLang: body.targetLang,
+            echoTargetLanguage: body.echoTargetLanguage === true,
+          },
+          env,
+          fetchFn,
+        ),
+      );
     } catch (e) {
       json(502, { error: (e as Error).message });
     }

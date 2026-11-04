@@ -23,6 +23,11 @@ export type Direction = "outgoing" | "incoming";
 export interface SessionRequest {
   provider: S2SProvider;
   targetLang: LanguageCode;
+  /**
+   * Also speak parts already in the target language (Gemini only). Used when the other side's
+   * translation is read aloud, so mixed-language speech doesn't drop out to near silence.
+   */
+  echoTargetLanguage?: boolean;
 }
 
 export interface SessionGrant {
