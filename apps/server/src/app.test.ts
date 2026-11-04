@@ -29,7 +29,7 @@ test("gemini session returns an ephemeral token locked to the target language", 
     assert.equal(res.status, 200);
     const grant = await res.json();
     assert.equal(grant.token, "auth_tokens/abc");
-    assert.equal(calls[0].body.liveConnectConstraints.config.translationConfig.targetLanguageCode, "ja");
+    assert.equal(calls[0].body.bidiGenerateContentSetup.generationConfig.translationConfig.targetLanguageCode, "ja");
   });
 });
 

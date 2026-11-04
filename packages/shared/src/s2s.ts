@@ -25,6 +25,19 @@ export interface S2SAdapter {
 export const GEMINI_MODEL = "gemini-3.5-live-translate-preview";
 export const OPENAI_MODEL = "gpt-realtime-translate";
 
+/** BidiGenerateContentSetup for live translation; transcription settings sit beside generationConfig. */
+export function geminiSetup(targetLang: LanguageCode) {
+  return {
+    model: `models/${GEMINI_MODEL}`,
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      translationConfig: { targetLanguageCode: targetLang, echoTargetLanguage: false },
+    },
+    inputAudioTranscription: {},
+    outputAudioTranscription: {},
+  };
+}
+
 export const geminiAdapter: S2SAdapter = {
   inputSampleRate: 16000,
   outputSampleRate: 24000,
@@ -34,19 +47,7 @@ export const geminiAdapter: S2SAdapter = {
       `BidiGenerateContentConstrained?access_token=${encodeURIComponent(grant.token)}`,
     headers: {},
   }),
-  setup: (targetLang) => [
-    {
-      setup: {
-        model: `models/${GEMINI_MODEL}`,
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          translationConfig: { targetLanguageCode: targetLang, echoTargetLanguage: false },
-        },
-      },
-    },
-  ],
+  setup: (targetLang) => [{ setup: geminiSetup(targetLang) }],
   audio: (pcm) => ({ realtimeInput: { audio: { data: toBase64(pcm), mimeType: "audio/pcm;rate=16000" } } }),
   parse: (message) => {
     const msg = message as {
