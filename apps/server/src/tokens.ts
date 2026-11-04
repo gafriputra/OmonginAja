@@ -1,4 +1,4 @@
-import { GEMINI_MODEL, OPENAI_MODEL, type LanguageCode, type SessionGrant, type SessionRequest } from "@omonginaja/shared";
+import { geminiSetup, OPENAI_MODEL, type LanguageCode, type SessionGrant, type SessionRequest } from "@omonginaja/shared";
 
 const TOKEN_TTL_MS = 30 * 60 * 1000;
 
@@ -18,15 +18,8 @@ async function mintGemini(targetLang: LanguageCode, apiKey: string, fetchFn: Fet
     body: JSON.stringify({
       uses: 1,
       expireTime: expiresAt,
-      liveConnectConstraints: {
-        model: `models/${GEMINI_MODEL}`,
-        config: {
-          responseModalities: ["AUDIO"],
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          translationConfig: { targetLanguageCode: targetLang, echoTargetLanguage: false },
-        },
-      },
+      // REST name of the SDKs' `liveConnectConstraints`: the setup this token is locked to.
+      bidiGenerateContentSetup: geminiSetup(targetLang),
     }),
   });
   if (!res.ok) throw new Error(`Gemini token failed: ${res.status} ${await res.text()}`);
