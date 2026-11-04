@@ -6,5 +6,6 @@ export default defineConfig({
   base: "./",
   plugins: [react()],
   build: { outDir: "../../dist/renderer", emptyOutDir: true },
-  server: { port: 5173, strictPort: true },
+  // Not the Vite default (5173), so another project's dev server is never loaded by mistake.
+  server: { port: 5317, strictPort: true },
 });
