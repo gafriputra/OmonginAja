@@ -17,6 +17,19 @@ interface Line {
 
 const VIRTUAL_HINTS = /blackhole|cable|omongin|loopback|virtual/i;
 
+/**
+ * One virtual cable shows up under slightly different labels: "BlackHole 2ch (Virtual)" and
+ * "Default - BlackHole 2ch (Virtual)", or VB-Cable's "CABLE Input" (playback) and "CABLE Output" (recording).
+ */
+function deviceName(label: string) {
+  return label
+    .replace(/^(default|communications) - /i, "")
+    .replace(/\s*\(.*\)$/, "")
+    .replace(/\b(input|output)\b/gi, "")
+    .trim()
+    .toLowerCase();
+}
+
 export function App() {
   const [serverUrl, setServerUrl] = useState("http://localhost:8787");
   const [provider, setProvider] = useState<S2SProvider>("gemini");
@@ -42,7 +55,8 @@ export function App() {
         setOutputs(outputs);
         setMicId(inputs.find((d) => !VIRTUAL_HINTS.test(d.label))?.deviceId ?? inputs[0]?.deviceId ?? "");
         setVirtualMicId(outputs.find((d) => VIRTUAL_HINTS.test(d.label))?.deviceId ?? "");
-        setMeetingAudioId(inputs.find((d) => VIRTUAL_HINTS.test(d.label))?.deviceId ?? "");
+        // Meeting audio needs a second virtual cable; never guess it, or it may be the
+        // virtual mic itself and the app would translate its own output.
       })
       .catch((e: Error) => setStatus(`Akses mikrofon ditolak: ${e.message}`));
   }, []);
@@ -120,6 +134,13 @@ export function App() {
     setLatency(undefined);
     try {
       if (!virtualMicId) throw new Error("Pilih perangkat mic virtual dulu (mis. BlackHole / VB-Cable).");
+      const virtualMicLabel = outputs.find((d) => d.deviceId === virtualMicId)?.label ?? "";
+      const meetingLabel = inputs.find((d) => d.deviceId === meetingAudioId)?.label ?? "";
+      if (meetingLabel && deviceName(meetingLabel) === deviceName(virtualMicLabel)) {
+        throw new Error(
+          "Audio meeting tidak boleh sama dengan mic virtual, nanti terjemahanmu ikut diterjemahkan ulang. Pilih \"Tidak dipakai\" atau kabel virtual kedua.",
+        );
+      }
       await startDirection("outgoing", micId, theirLang);
       if (meetingAudioId) await startDirection("incoming", meetingAudioId, myLang);
       setRunning(true);
