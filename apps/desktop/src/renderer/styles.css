@@ -46,3 +46,6 @@ body.overlay { background: transparent; }
 .conversation .line { background: var(--bg); }
 button.delete { background: transparent; color: var(--accent); padding: 4px 0; text-align: left; font-weight: 500; }
 input[type="range"] { padding: 0; accent-color: var(--accent); }
+.warning { margin: -4px 0 0; font-size: 12px; color: #b7791f; }
+button.mute { background: var(--card); color: var(--fg); border: 1px solid var(--border); font-weight: 500; }
+button.mute.on { background: #b7791f; color: white; border-color: transparent; }

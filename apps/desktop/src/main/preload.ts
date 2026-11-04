@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld("omongin", {
   onSubtitle: (cb: (line: SubtitleLine) => void) => {
     ipcRenderer.on("subtitle", (_e, line: SubtitleLine) => cb(line));
   },
+  onMuteToggle: (cb: () => void) => {
+    ipcRenderer.on("mute:toggle", () => cb());
+  },
   s2s: {
     start: (id: string, serverUrl: string, req: SessionRequest): Promise<{ input: number; output: number }> =>
       ipcRenderer.invoke("s2s:start", id, serverUrl, req),

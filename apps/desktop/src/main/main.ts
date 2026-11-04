@@ -1,10 +1,14 @@
-import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, screen } from "electron";
 import path from "node:path";
 import type { SessionRequest } from "@omonginaja/shared";
 import { S2SConnection } from "./s2s";
 
 const devServer = process.env.VITE_DEV_SERVER_URL;
 let overlay: BrowserWindow | undefined;
+let mainWindow: BrowserWindow | undefined;
+
+/** Works while the meeting app has focus, so the user can mute translation mid-call. */
+const MUTE_SHORTCUT = "CommandOrControl+Shift+Space";
 const connections = new Map<string, S2SConnection>();
 
 function load(win: BrowserWindow, hash = "") {
@@ -19,6 +23,7 @@ function createMainWindow() {
     title: "OmonginAja",
     webPreferences: { preload: path.join(__dirname, "preload.js") },
   });
+  mainWindow = win;
   load(win);
 }
 
@@ -66,6 +71,9 @@ ipcMain.on("s2s:stop", (_e, id: string) => connections.get(id)?.close());
 app.whenReady().then(() => {
   createMainWindow();
   createOverlay();
+  globalShortcut.register(MUTE_SHORTCUT, () => mainWindow?.webContents.send("mute:toggle"));
 });
+
+app.on("will-quit", () => globalShortcut.unregisterAll());
 
 app.on("window-all-closed", () => app.quit());

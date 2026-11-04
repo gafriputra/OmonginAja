@@ -17,6 +17,9 @@ import { loadHistory, loadUsage, saveHistory, saveUsage, type Conversation, type
 const LIVE_LINES = 4;
 
 const VIRTUAL_HINTS = /blackhole|cable|omongin|loopback|virtual/i;
+/** A laptop's own mic also hears its speakers, so the other side's voice gets "translated" as yours. */
+const BUILT_IN_MIC = /built-in|internal|macbook|bawaan/i;
+const MUTE_KEYS = navigator.platform.startsWith("Mac") ? "⌘⇧Spasi" : "Ctrl+Shift+Spasi";
 
 /**
  * One virtual cable shows up under slightly different labels: "BlackHole 2ch (Virtual)" and
@@ -46,6 +49,9 @@ export function App() {
   const [originalVolume, setOriginalVolume] = useState(0.3);
   const passthrough = useRef<{ setVolume(v: number): void }>();
   const [running, setRunning] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(false);
+  mutedRef.current = muted;
   const [status, setStatus] = useState("");
   const [tab, setTab] = useState<"translate" | "history">("translate");
   const [lines, setLines] = useState<Line[]>([]);
@@ -63,6 +69,7 @@ export function App() {
 
   useEffect(() => {
     window.omongin.s2s.onEvent((id, event) => handlers.current.get(id)?.(event));
+    window.omongin.onMuteToggle(() => setMuted((m) => !m));
     listDevices()
       .then(({ inputs, outputs }) => {
         setInputs(inputs);
@@ -139,6 +146,8 @@ export function App() {
     let silentSince = performance.now();
     const stopCapture = await captureDevice(deviceId, rates.input, direction === "outgoing", (pcm) => {
       const now = performance.now();
+      // Muted: keep the session alive with silence so unmuting is instant.
+      if (direction === "outgoing" && mutedRef.current) pcm = new Int16Array(pcm.length);
       meter.onInput(pcm, now);
       window.omongin.s2s.audio(id, new Uint8Array(pcm.buffer));
       // Start a new line after a pause so the log reads as separate utterances.
@@ -168,6 +177,7 @@ export function App() {
     setLatency(undefined);
     setLines([]);
     setElapsed(0);
+    setMuted(false);
     conversation.current = { id: crypto.randomUUID(), startedAt: Date.now(), provider, myLang, theirLang, lines: [] };
     try {
       if (!virtualMicId) throw new Error("Pilih perangkat mic virtual dulu (mis. BlackHole / VB-Cable).");
@@ -285,6 +295,12 @@ export function App() {
               </select>
             </label>
             <label>Mikrofon asli{deviceSelect(inputs, micId, setMicId)}</label>
+            {BUILT_IN_MIC.test(inputs.find((d) => d.deviceId === micId)?.label ?? "") && (
+              <p className="warning">
+                Ini mic laptop. Pakai headset, atau suara lawan bicara dari speaker ikut tertangkap dan diterjemahkan
+                seolah-olah suaramu.
+              </p>
+            )}
             <label>Kirim terjemahan ke (mic virtual){deviceSelect(outputs, virtualMicId, setVirtualMicId)}</label>
             <label>Audio meeting (untuk subtitle){deviceSelect(inputs, meetingAudioId, setMeetingAudioId, true)}</label>
             {meetingAudioId && (
@@ -319,6 +335,11 @@ export function App() {
           <button className={running ? "stop" : "start"} onClick={running ? stop : start}>
             {running ? "Berhenti" : "Mulai menerjemahkan"}
           </button>
+          {running && (
+            <button className={muted ? "mute on" : "mute"} onClick={() => setMuted((m) => !m)}>
+              {muted ? "🔇 Terjemahan suaramu dibisukan" : "🎙 Terjemahan suaramu aktif"} · {MUTE_KEYS}
+            </button>
+          )}
           {status && <p className="status">{status}</p>}
           {latency && (
             <p className="latency">
