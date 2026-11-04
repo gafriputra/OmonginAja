@@ -64,6 +64,14 @@ export async function captureDevice(
 }
 
 /**
+ * enumerateDevices lists the system default output as deviceId "default", but
+ * AudioContext.setSinkId rejects that id and wants "" for the default device.
+ */
+function routeTo(ctx: AudioContext, sinkId: string) {
+  return ctx.setSinkId(sinkId === "default" ? "" : sinkId);
+}
+
+/**
  * Plays an input device straight to an output device at an adjustable volume. Used to keep the
  * meeting's original voices audible, but quieter, underneath their spoken translation.
  */
@@ -72,7 +80,7 @@ export async function playThrough(deviceId: string, sinkId: string, volume: numb
     audio: { deviceId: { exact: deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
   });
   const ctx = new AudioContext({ latencyHint: "interactive" });
-  await ctx.setSinkId(sinkId);
+  await routeTo(ctx, sinkId);
   const gain = ctx.createGain();
   gain.gain.value = volume;
   ctx.createMediaStreamSource(stream).connect(gain).connect(ctx.destination);
@@ -102,7 +110,7 @@ export class PcmPlayer {
       await this.ctx?.close();
       this.ctx = new AudioContext({ sampleRate });
     }
-    await this.ctx.setSinkId(sinkId);
+    await routeTo(this.ctx, sinkId);
   }
 
   play(pcm: Uint8Array) {
