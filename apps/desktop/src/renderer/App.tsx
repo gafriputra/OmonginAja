@@ -6,14 +6,15 @@ import {
   type Direction,
   type LanguageCode,
   type S2SProvider,
+  UsageTracker,
 } from "@omonginaja/shared";
 import { captureDevice, listDevices, PcmPlayer } from "./audio";
+import { History } from "./History";
+import { LineView } from "./LineView";
+import { loadHistory, loadUsage, saveHistory, saveUsage, type Conversation, type Line } from "./storage";
 
-interface Line {
-  direction: Direction;
-  original: string;
-  translated: string;
-}
+/** Only the latest exchanges stay on the main screen; the full conversation lives in Riwayat. */
+const LIVE_LINES = 4;
 
 const VIRTUAL_HINTS = /blackhole|cable|omongin|loopback|virtual/i;
 
@@ -42,10 +43,19 @@ export function App() {
   const [meetingAudioId, setMeetingAudioId] = useState("");
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState("");
+  const [tab, setTab] = useState<"translate" | "history">("translate");
   const [lines, setLines] = useState<Line[]>([]);
+  const [history, setHistory] = useState<Conversation[]>(loadHistory);
+  const [elapsed, setElapsed] = useState(0);
+  const usage = useRef(new UsageTracker(loadUsage()));
+  const conversation = useRef<Conversation>();
+  const linesRef = useRef<Line[]>([]);
+  linesRef.current = lines;
   const [latency, setLatency] = useState<{ last: number; average: number }>();
   const cleanup = useRef<(() => void)[]>([]);
-  const handlers = useRef(new Map<string, (event: Parameters<Parameters<Window["omongin"]["s2s"]["onEvent"]>[0]>[1]) => void>());
+  const handlers = useRef(
+    new Map<string, (event: Parameters<Parameters<Window["omongin"]["s2s"]["onEvent"]>[0]>[1]) => void>(),
+  );
 
   useEffect(() => {
     window.omongin.s2s.onEvent((id, event) => handlers.current.get(id)?.(event));
@@ -76,9 +86,10 @@ export function App() {
           next.push({ ...line });
           lineIndex = next.length - 1;
         } else next[lineIndex] = { ...line };
-        return next.slice(-50);
+        return next;
       });
-      if (direction === "incoming") window.omongin.showSubtitle({ original: line.original, translated: line.translated });
+      if (direction === "incoming")
+        window.omongin.showSubtitle({ original: line.original, translated: line.translated });
     };
 
     handlers.current.set(id, (event) => {
@@ -121,7 +132,10 @@ export function App() {
       }
     });
 
+    const startedAt = Date.now();
     cleanup.current.push(() => {
+      usage.current.record(provider, Math.round((Date.now() - startedAt) / 1000), new Date());
+      saveUsage(usage.current.toJSON());
       stopCapture();
       window.omongin.s2s.stop(id);
       handlers.current.delete(id);
@@ -132,13 +146,16 @@ export function App() {
   async function start() {
     setStatus("");
     setLatency(undefined);
+    setLines([]);
+    setElapsed(0);
+    conversation.current = { id: crypto.randomUUID(), startedAt: Date.now(), provider, myLang, theirLang, lines: [] };
     try {
       if (!virtualMicId) throw new Error("Pilih perangkat mic virtual dulu (mis. BlackHole / VB-Cable).");
       const virtualMicLabel = outputs.find((d) => d.deviceId === virtualMicId)?.label ?? "";
       const meetingLabel = inputs.find((d) => d.deviceId === meetingAudioId)?.label ?? "";
       if (meetingLabel && deviceName(meetingLabel) === deviceName(virtualMicLabel)) {
         throw new Error(
-          "Audio meeting tidak boleh sama dengan mic virtual, nanti terjemahanmu ikut diterjemahkan ulang. Pilih \"Tidak dipakai\" atau kabel virtual kedua.",
+          'Audio meeting tidak boleh sama dengan mic virtual, nanti terjemahanmu ikut diterjemahkan ulang. Pilih "Tidak dipakai" atau kabel virtual kedua.',
         );
       }
       await startDirection("outgoing", micId, theirLang);
@@ -153,9 +170,42 @@ export function App() {
   function stop() {
     cleanup.current.splice(0).forEach((fn) => fn());
     setRunning(false);
+    const finished = conversation.current;
+    conversation.current = undefined;
+    if (finished && linesRef.current.length) {
+      setHistory((prev) => {
+        const next = [{ ...finished, lines: linesRef.current }, ...prev];
+        saveHistory(next);
+        return next;
+      });
+    }
   }
 
-  const deviceSelect = (devices: MediaDeviceInfo[], value: string, onChange: (id: string) => void, optional = false) => (
+  function deleteConversation(id: string) {
+    setHistory((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      saveHistory(next);
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, [running]);
+
+  const sessions = meetingAudioId ? 2 : 1;
+  const usedToday = Math.round(
+    (usage.current.secondsOn(provider, new Date()) + (running ? elapsed * sessions : 0)) / 60,
+  );
+
+  const deviceSelect = (
+    devices: MediaDeviceInfo[],
+    value: string,
+    onChange: (id: string) => void,
+    optional = false,
+  ) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} disabled={running}>
       {optional && <option value="">Tidak dipakai</option>}
       {!optional && !value && <option value="">Pilih perangkat…</option>}
@@ -182,51 +232,78 @@ export function App() {
       <h1>OmonginAja</h1>
       <p className="tagline">Ngomong pakai bahasamu, lawan bicara dengar bahasanya.</p>
 
-      <section className="langs">
-        <label>Bahasaku{languageSelect(myLang, setMyLang)}</label>
-        <label>Bahasa lawan bicara{languageSelect(theirLang, setTheirLang)}</label>
-      </section>
+      <nav className="tabs">
+        <button className={tab === "translate" ? "active" : ""} onClick={() => setTab("translate")}>
+          Terjemah
+        </button>
+        <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
+          Riwayat{history.length ? ` (${history.length})` : ""}
+        </button>
+      </nav>
 
-      <section>
-        <label>
-          Mesin penerjemah
-          <select value={provider} onChange={(e) => setProvider(e.target.value as S2SProvider)} disabled={running}>
-            {Object.entries(S2S_PROVIDERS).map(([key, name]) => (
-              <option key={key} value={key}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>Mikrofon asli{deviceSelect(inputs, micId, setMicId)}</label>
-        <label>Kirim terjemahan ke (mic virtual){deviceSelect(outputs, virtualMicId, setVirtualMicId)}</label>
-        <label>Audio meeting (untuk subtitle){deviceSelect(inputs, meetingAudioId, setMeetingAudioId, true)}</label>
-        <label>
-          Server
-          <input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} disabled={running} />
-        </label>
-      </section>
+      {tab === "history" ? (
+        <History conversations={history} onDelete={deleteConversation} />
+      ) : (
+        <>
+          <section className="langs">
+            <label>Bahasaku{languageSelect(myLang, setMyLang)}</label>
+            <label>Bahasa lawan bicara{languageSelect(theirLang, setTheirLang)}</label>
+          </section>
 
-      <button className={running ? "stop" : "start"} onClick={running ? stop : start}>
-        {running ? "Berhenti" : "Mulai menerjemahkan"}
-      </button>
-      {status && <p className="status">{status}</p>}
-      {latency && (
-        <p className="latency">
-          Jeda terakhir <strong>{(latency.last / 1000).toFixed(2)} dtk</strong> · rata-rata{" "}
-          {(latency.average / 1000).toFixed(2)} dtk
-        </p>
+          <section>
+            <label>
+              Mesin penerjemah
+              <select value={provider} onChange={(e) => setProvider(e.target.value as S2SProvider)} disabled={running}>
+                {Object.entries(S2S_PROVIDERS).map(([key, name]) => (
+                  <option key={key} value={key}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>Mikrofon asli{deviceSelect(inputs, micId, setMicId)}</label>
+            <label>Kirim terjemahan ke (mic virtual){deviceSelect(outputs, virtualMicId, setVirtualMicId)}</label>
+            <label>Audio meeting (untuk subtitle){deviceSelect(inputs, meetingAudioId, setMeetingAudioId, true)}</label>
+            <label>
+              Server
+              <input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} disabled={running} />
+            </label>
+          </section>
+
+          <button className={running ? "stop" : "start"} onClick={running ? stop : start}>
+            {running ? "Berhenti" : "Mulai menerjemahkan"}
+          </button>
+          {status && <p className="status">{status}</p>}
+          {latency && (
+            <p className="latency">
+              Jeda terakhir <strong>{(latency.last / 1000).toFixed(2)} dtk</strong> · rata-rata{" "}
+              {(latency.average / 1000).toFixed(2)} dtk
+            </p>
+          )}
+
+          <p className="usage">
+            {running && <>Sesi ini {formatDuration(elapsed)} · </>}
+            Pemakaian {S2S_PROVIDERS[provider].split(" ")[0]} hari ini ±{usedToday} menit
+            {meetingAudioId && " (subtitle aktif: dihitung 2×)"}
+          </p>
+
+          {lines.length > 0 && (
+            <section className="log">
+              {lines.slice(-LIVE_LINES).map((l, i) => (
+                <LineView key={i} line={l} />
+              ))}
+              {lines.length > LIVE_LINES && (
+                <p className="more">Percakapan lengkap tersimpan di Riwayat setelah kamu berhenti.</p>
+              )}
+            </section>
+          )}
+        </>
       )}
-
-      <section className="log">
-        {lines.map((l, i) => (
-          <div key={i} className={`line ${l.direction}`}>
-            <span className="who">{l.direction === "outgoing" ? "Kamu" : "Mereka"}</span>
-            <span className="original">{l.original}</span>
-            <span className="translated">{l.translated}</span>
-          </div>
-        ))}
-      </section>
     </main>
   );
+}
+
+function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  return `${m}:${String(seconds % 60).padStart(2, "0")}`;
 }
