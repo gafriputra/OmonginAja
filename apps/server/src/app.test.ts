@@ -20,33 +20,45 @@ async function withServer(fetchFn: Fetch, run: (url: string, calls: { url: strin
   }
 }
 
-const post = (url: string, body: unknown) =>
-  fetch(`${url}/session`, { method: "POST", body: JSON.stringify(body) });
+const post = (url: string, body: unknown) => fetch(`${url}/session`, { method: "POST", body: JSON.stringify(body) });
 
 test("gemini session returns an ephemeral token locked to the target language", async () => {
-  await withServer(async () => Response.json({ name: "auth_tokens/abc" }), async (url, calls) => {
-    const res = await post(url, { provider: "gemini", targetLang: "ja" });
-    assert.equal(res.status, 200);
-    const grant = await res.json();
-    assert.equal(grant.token, "auth_tokens/abc");
-    assert.equal(calls[0].body.bidiGenerateContentSetup.generationConfig.translationConfig.targetLanguageCode, "ja");
-  });
+  await withServer(
+    async () => Response.json({ name: "auth_tokens/abc" }),
+    async (url, calls) => {
+      const res = await post(url, { provider: "gemini", targetLang: "ja" });
+      assert.equal(res.status, 200);
+      const grant = await res.json();
+      assert.equal(grant.token, "auth_tokens/abc");
+      assert.equal(calls[0].body.bidiGenerateContentSetup.generationConfig.translationConfig.targetLanguageCode, "ja");
+      assert.equal(calls[0].body.bidiGenerateContentSetup.generationConfig.translationConfig.echoTargetLanguage, false);
+
+      await post(url, { provider: "gemini", targetLang: "id", echoTargetLanguage: true });
+      assert.equal(calls[1].body.bidiGenerateContentSetup.generationConfig.translationConfig.echoTargetLanguage, true);
+    },
+  );
 });
 
 test("openai session returns the client secret", async () => {
-  await withServer(async () => Response.json({ value: "ek_1", expires_at: 1_900_000_000 }), async (url, calls) => {
-    const grant = await (await post(url, { provider: "openai", targetLang: "en" })).json();
-    assert.equal(grant.token, "ek_1");
-    assert.equal(grant.expiresAt, new Date(1_900_000_000_000).toISOString());
-    assert.equal(calls[0].body.session.audio.output.language, "en");
-  });
+  await withServer(
+    async () => Response.json({ value: "ek_1", expires_at: 1_900_000_000 }),
+    async (url, calls) => {
+      const grant = await (await post(url, { provider: "openai", targetLang: "en" })).json();
+      assert.equal(grant.token, "ek_1");
+      assert.equal(grant.expiresAt, new Date(1_900_000_000_000).toISOString());
+      assert.equal(calls[0].body.session.audio.output.language, "en");
+    },
+  );
 });
 
 test("invalid requests and provider failures are reported", async () => {
-  await withServer(async () => new Response("nope", { status: 401 }), async (url) => {
-    assert.equal((await post(url, { provider: "deepl", targetLang: "en" })).status, 400);
-    const res = await post(url, { provider: "openai", targetLang: "en" });
-    assert.equal(res.status, 502);
-    assert.match((await res.json()).error, /401/);
-  });
+  await withServer(
+    async () => new Response("nope", { status: 401 }),
+    async (url) => {
+      assert.equal((await post(url, { provider: "deepl", targetLang: "en" })).status, 400);
+      const res = await post(url, { provider: "openai", targetLang: "en" });
+      assert.equal(res.status, 502);
+      assert.match((await res.json()).error, /401/);
+    },
+  );
 });

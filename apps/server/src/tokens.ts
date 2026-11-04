@@ -1,4 +1,10 @@
-import { geminiSetup, OPENAI_MODEL, type LanguageCode, type SessionGrant, type SessionRequest } from "@omonginaja/shared";
+import {
+  geminiSetup,
+  OPENAI_MODEL,
+  type LanguageCode,
+  type SessionGrant,
+  type SessionRequest,
+} from "@omonginaja/shared";
 
 const TOKEN_TTL_MS = 30 * 60 * 1000;
 
@@ -6,11 +12,15 @@ export type Fetch = typeof fetch;
 
 /** Mints a short-lived, single-session provider token. Provider API keys stay on the server. */
 export async function mintToken(req: SessionRequest, env = process.env, fetchFn: Fetch = fetch): Promise<SessionGrant> {
-  if (req.provider === "gemini") return mintGemini(req.targetLang, required(env, "GEMINI_API_KEY"), fetchFn);
+  if (req.provider === "gemini") return mintGemini(req, required(env, "GEMINI_API_KEY"), fetchFn);
   return mintOpenAI(req.targetLang, required(env, "OPENAI_API_KEY"), fetchFn);
 }
 
-async function mintGemini(targetLang: LanguageCode, apiKey: string, fetchFn: Fetch): Promise<SessionGrant> {
+async function mintGemini(
+  { targetLang, echoTargetLanguage }: SessionRequest,
+  apiKey: string,
+  fetchFn: Fetch,
+): Promise<SessionGrant> {
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
   const res = await fetchFn("https://generativelanguage.googleapis.com/v1beta/auth_tokens", {
     method: "POST",
@@ -19,7 +29,7 @@ async function mintGemini(targetLang: LanguageCode, apiKey: string, fetchFn: Fet
       uses: 1,
       expireTime: expiresAt,
       // REST name of the SDKs' `liveConnectConstraints`: the setup this token is locked to.
-      bidiGenerateContentSetup: geminiSetup(targetLang),
+      bidiGenerateContentSetup: geminiSetup(targetLang, echoTargetLanguage),
     }),
   });
   if (!res.ok) throw new Error(`Gemini token failed: ${res.status} ${await res.text()}`);
@@ -42,9 +52,18 @@ async function mintOpenAI(targetLang: LanguageCode, apiKey: string, fetchFn: Fet
     }),
   });
   if (!res.ok) throw new Error(`OpenAI token failed: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as { value?: string; expires_at?: number; client_secret?: { value: string; expires_at: number } };
+  const data = (await res.json()) as {
+    value?: string;
+    expires_at?: number;
+    client_secret?: { value: string; expires_at: number };
+  };
   const secret = data.client_secret ?? { value: data.value!, expires_at: data.expires_at! };
-  return { provider: "openai", targetLang, token: secret.value, expiresAt: new Date(secret.expires_at * 1000).toISOString() };
+  return {
+    provider: "openai",
+    targetLang,
+    token: secret.value,
+    expiresAt: new Date(secret.expires_at * 1000).toISOString(),
+  };
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {

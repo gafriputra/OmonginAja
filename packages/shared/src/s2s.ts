@@ -1,5 +1,5 @@
 import type { LanguageCode } from "./languages.js";
-import type { S2SProvider, SessionGrant } from "./protocol.js";
+import type { S2SProvider, SessionGrant, SessionRequest } from "./protocol.js";
 
 /** What the app cares about from a provider stream, whichever provider it is. */
 export type S2SEvent =
@@ -17,7 +17,7 @@ export interface S2SAdapter {
   outputSampleRate: number;
   connect(grant: SessionGrant): { url: string; headers: Record<string, string> };
   /** Messages to send right after the socket opens. */
-  setup(targetLang: LanguageCode): unknown[];
+  setup(req: SessionRequest): unknown[];
   audio(pcm: Uint8Array): unknown;
   parse(message: unknown): S2SEvent[];
 }
@@ -26,12 +26,12 @@ export const GEMINI_MODEL = "gemini-3.5-live-translate-preview";
 export const OPENAI_MODEL = "gpt-realtime-translate";
 
 /** BidiGenerateContentSetup for live translation; transcription settings sit beside generationConfig. */
-export function geminiSetup(targetLang: LanguageCode) {
+export function geminiSetup(targetLang: LanguageCode, echoTargetLanguage = false) {
   return {
     model: `models/${GEMINI_MODEL}`,
     generationConfig: {
       responseModalities: ["AUDIO"],
-      translationConfig: { targetLanguageCode: targetLang, echoTargetLanguage: false },
+      translationConfig: { targetLanguageCode: targetLang, echoTargetLanguage },
     },
     inputAudioTranscription: {},
     outputAudioTranscription: {},
@@ -47,7 +47,7 @@ export const geminiAdapter: S2SAdapter = {
       `BidiGenerateContentConstrained?access_token=${encodeURIComponent(grant.token)}`,
     headers: {},
   }),
-  setup: (targetLang) => [{ setup: geminiSetup(targetLang) }],
+  setup: (req) => [{ setup: geminiSetup(req.targetLang, req.echoTargetLanguage) }],
   audio: (pcm) => ({ realtimeInput: { audio: { data: toBase64(pcm), mimeType: "audio/pcm;rate=16000" } } }),
   parse: (message) => {
     const msg = message as {
@@ -62,7 +62,8 @@ export const geminiAdapter: S2SAdapter = {
     const events: S2SEvent[] = [];
     const content = msg.serverContent;
     if (content?.inputTranscription?.text) events.push({ type: "source_text", text: content.inputTranscription.text });
-    if (content?.outputTranscription?.text) events.push({ type: "translated_text", text: content.outputTranscription.text });
+    if (content?.outputTranscription?.text)
+      events.push({ type: "translated_text", text: content.outputTranscription.text });
     for (const part of content?.modelTurn?.parts ?? []) {
       if (part.inlineData?.data) events.push({ type: "audio", pcm: fromBase64(part.inlineData.data) });
     }
@@ -79,7 +80,7 @@ export const openaiAdapter: S2SAdapter = {
     url: `wss://api.openai.com/v1/realtime/translations?model=${OPENAI_MODEL}`,
     headers: { Authorization: `Bearer ${grant.token}` },
   }),
-  setup: (targetLang) => [
+  setup: ({ targetLang }) => [
     {
       type: "session.update",
       session: {

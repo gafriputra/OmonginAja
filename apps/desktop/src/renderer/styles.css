@@ -33,3 +33,19 @@ body.overlay { background: transparent; }
 .subtitle .translated { font-size: 22px; font-weight: 600; }
 .subtitle .original { font-size: 13px; color: #ccc; }
 .latency { margin: 0; font-size: 13px; color: var(--muted); }
+
+.tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.tabs button { flex: 1; background: transparent; color: var(--muted); padding: 8px; font-weight: 600; }
+.tabs button.active { background: var(--bg); color: var(--fg); }
+.usage, .more, .empty { margin: 0; font-size: 13px; color: var(--muted); }
+.history { gap: 8px; }
+.conversation { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.conversation-head { width: 100%; display: grid; gap: 2px; text-align: left; background: transparent; color: var(--fg); font-weight: 600; padding: 12px; }
+.conversation-head .meta { font-weight: 400; font-size: 12px; color: var(--muted); }
+.conversation .log { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.conversation .line { background: var(--bg); }
+button.delete { background: transparent; color: var(--accent); padding: 4px 0; text-align: left; font-weight: 500; }
+input[type="range"] { padding: 0; accent-color: var(--accent); }
+.warning { margin: -4px 0 0; font-size: 12px; color: #b7791f; }
+button.mute { background: var(--card); color: var(--fg); border: 1px solid var(--border); font-weight: 500; }
+button.mute.on { background: #b7791f; color: white; border-color: transparent; }

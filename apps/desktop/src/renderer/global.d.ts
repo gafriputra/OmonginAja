@@ -7,6 +7,7 @@ interface Window {
   omongin: {
     showSubtitle(line: SubtitleLine): void;
     onSubtitle(cb: (line: SubtitleLine) => void): void;
+    onMuteToggle(cb: () => void): void;
     s2s: {
       start(
         id: string,
